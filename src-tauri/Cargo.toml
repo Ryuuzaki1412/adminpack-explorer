@@ -1,0 +1,39 @@
+[package]
+name = "adminpack-explorer"
+version = "0.1.0"
+description = "Tauri desktop app for browsing and inspecting Logicalis NMS AdminPack monitoring definitions"
+edition = "2021"
+rust-version = "1.77"
+authors = ["ryuuzaki1412"]
+license = "MIT"
+repository = "https://github.com/ryuuzaki1412/adminpack-explorer"
+homepage = "https://github.com/ryuuzaki1412/adminpack-explorer"
+keywords = ["tauri", "nms", "monitoring", "adminpack", "snmp", "api"]
+categories = ["network", "utilities"]
+
+[lib]
+name = "adminpack_explorer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = [] }
+tauri-plugin-store = "2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+futures = "0.3"
+dashmap = "6"
+dotenvy = "0.15"
+base64 = "0.22"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

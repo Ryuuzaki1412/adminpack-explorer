@@ -1,0 +1,20 @@
+{
+  "name": "adminpack-explorer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:clean": "rm -rf src-tauri/target/release/bundle && tauri build",
+    "sign": "./scripts/sign-and-package.sh"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/plugin-store": "^2.0.0"
+  }
+}

@@ -1,0 +1,74 @@
+# ==================== Rust / Cargo ====================
+/target
+**/target
+**/*.rs.bk
+Cargo.lock
+
+# ==================== Node / npm ====================
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# ==================== Tauri build outputs ====================
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/gen/
+*.app
+*.dmg
+*.deb
+*.rpm
+*.exe
+*.msi
+
+# ==================== Environment / Secrets ====================
+.env
+.env.*
+!.env.example
+
+# ==================== IDE / Editor ====================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+*.ipr
+*.iws
+
+# ==================== Logs / Runtime ====================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ==================== Misc ====================
+*.tgz
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+dist/
+out/
+build/
+*.log.*
+.tmp/
+.idea/
+*.swp
+
+# ==================== OS ====================
+Thumbs.db
+ehthumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+$RECYCLE.BIN/
