@@ -183,44 +183,36 @@ adminpack-explorer/
 
 ## ❓ 常见问题
 
-### macOS 下载后提示"已损坏，无法打开"
+### macOS 提示"无法打开，因为来自身份不明的开发者"
 
-这是 **macOS Gatekeeper** 的正常防护机制——不是真的损坏。原因是：
-- DMG 通过浏览器下载时，macOS 自动添加 `com.apple.quarantine` 扩展属性
-- App 没有 Apple Developer ID 正式签名（未公证）
+这是 **macOS Gatekeeper** 对未签名/未公证应用的正常防护 — App 是好的，**不是损坏**。本项目没有 Apple Developer ID（$99/年），所以用 **ad-hoc 签名**（免费），系统会把 App 标成"未识别开发者"。
 
-**解决方法**（任选其一，最快 5 秒）：
+> 关键区别：
+> - **"已损坏"** = 文件真的被改坏了（遇到这种情况才移到废纸篓）
+> - **"无法打开，因为来自身份不明的开发者"** = 签名不被信任，走下面任一方案即可
 
-#### 方案 A：右键打开（最常用）
-1. 双击 DMG 挂载，弹出"已损坏"对话框
-2. 点 **"取消"**（不要移到废纸篓）
-3. 在 Finder 里找到 `AdminPack Explorer.app`
-4. **右键 → 打开**
-5. 弹出的确认框点 **"打开"**
+**解决方案（任选其一）**：
+
+#### 方案 A：右键打开（最快，3 秒）
+1. 双击 DMG 挂载
+2. 把 `AdminPack Explorer.app` 拖进 Applications
+3. 在 Finder 找到 App，**右键 → 打开**
+4. 弹出确认框点 **"打开"**
+5. ✅ 以后双击就正常了
+
+#### 方案 B：系统设置里"仍要打开"（纯 GUI，不敲终端）
+1. 双击 App 触发拦截
+2. 弹出"无法打开，因为来自身份不明的开发者"对话框 → 点 **"取消"**（不要移到废纸篓）
+3. 打开 **系统设置 → 隐私与安全**
+4. 往下滚到底部，会看到一行：
+   > "AdminPack Explorer" 被阻止，因为来自身份不明的开发者
+5. 点旁边的 **"仍要打开"** → 输登录密码 → 弹窗再点 **"打开"**
 6. ✅ 以后双击就正常了
 
-#### 方案 B：终端一行命令
-```bash
-xattr -d com.apple.quarantine /Applications/AdminPack\ Explorer.app
-```
-下载 dmg 后用这个命令清除 quarantine 属性，然后正常打开。
-
-#### 方案 C：系统设置里允许
-1. 双击 dmg → 弹"已损坏"对话框 → **取消**
-2. 打开 **系统设置 → 隐私与安全**
-3. 往下滚到底部，会看到"AdminPack Explorer 被阻止"
-4. 点 **"仍要打开"** → 输密码 → 打开
-
-> **关于代码签名**：当前 release 是 **ad-hoc 签名**（免费），没有 Apple Developer ID 正式签名。  
-> 如果你想彻底消除这个警告，需要：
-> 1. 注册 [Apple Developer Program](https://developer.apple.com/programs/)（$99/年）
-> 2. 在 `tauri.conf.json` 的 `bundle.macOS.signingIdentity` 填你的 Team ID
-> 3. 配置 `APPLE_ID` / `APPLE_PASSWORD`（App-specific password）环境变量
-> 4. 在 `tauri build` 完成后会自动 `notarytool submit` 进行 Apple 公证
-> 5. 公证后双击直接打开，无需任何用户操作
-> 
-> 适合：正式产品化、对外发布、大规模分发  
-> 不适合：内部工具、demo、小规模试用
+> **关于 ad-hoc 签名的硬限制**：
+> - `hardenedRuntime = false` + ad-hoc：Library Validation 不会拒绝自签名动态库，可以正常加载
+> - 没有 `com.apple.developer.team-identifier` entitlement（ad-hoc 拿不到）：沙盒相关 API（如 iCloud、APN）不可用 — 本项目用不到，不影响
+> - 不公证 → Gatekeeper 第一次会拦，走方案 A 或 B 一次后系统会记住你的选择
 
 ### 设置项不生效 / API 调用失败
 检查 ⚙ 设置里：
