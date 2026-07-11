@@ -1,0 +1,44 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Tauri build (ad-hoc signed, no notarization)
+        env:
+          # Force ad-hoc signing identity ("-" is ad-hoc in codesign)
+          CSC_IDENTITY: '-'
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # Skip any team / Apple ID based signing
+          APPLE_ID: ''
+          APPLE_PASSWORD: ''
+          APPLE_TEAM_ID: ''
+        run: npm run build:clean
+
+      - name: Upload DMG to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+          fail_on_unmatched_files: true
