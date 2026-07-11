@@ -134,6 +134,7 @@ async function saveSettings(cfg) {
     _log('saveSettings failed: ' + e, true);
     return false;
   }
+}
 
 
 // Update the brand bar's NMS endpoint label from saved settings
@@ -151,8 +152,6 @@ async function refreshApiHost() {
   } else {
     el.textContent = '未配置 NMS';
   }
-}
-
 }
 
 // Helper: build NmsConfig payload for backend invocations
@@ -1195,6 +1194,43 @@ function setupSettings() {
     aiApiKey.type = aiApiKey.type === 'password' ? 'text' : 'password';
   });
 
+  // Test connection: send a "ping" to the configured AI provider and show result.
+  // Uses the current form values (already auto-saved on change) so the user can
+  // verify whatever they have on screen.
+  if (aiTestBtn) aiTestBtn.addEventListener('click', async () => {
+    if (!invoke) {
+      aiTestResult.className = 'test-result error';
+      aiTestResult.style.display = 'block';
+      aiTestResult.textContent = '✗ Tauri invoke 不可用';
+      return;
+    }
+    aiTestBtn.disabled = true;
+    aiTestResult.className = 'test-result loading';
+    aiTestResult.style.display = 'block';
+    aiTestResult.textContent = '测试中…';
+    try {
+      // Flush any pending auto-save so the backend sees the latest values.
+      await autoSaveNow();
+      const cfg = readSettingsForm();
+      if (!cfg.ai.base_url || !cfg.ai.model_id) {
+        throw new Error('请先填写 Base URL 和 Model ID');
+      }
+      const reply = await invoke('cmd_test_ai', {
+        provider: cfg.ai.provider,
+        baseUrl:  cfg.ai.base_url,
+        apiKey:   cfg.ai.api_key,
+        modelId:  cfg.ai.model_id,
+      });
+      aiTestResult.className = 'test-result success';
+      aiTestResult.textContent = '✓ 连接成功 · 回复: ' + (reply || '(空)');
+    } catch (err) {
+      aiTestResult.className = 'test-result error';
+      aiTestResult.textContent = '✗ 连接失败: ' + (err && err.message ? err.message : err);
+    } finally {
+      aiTestBtn.disabled = false;
+    }
+  });
+
   // Save button: force-immediate save (skip debounce) and close.
   // The "auto-save" indicator will confirm the write happened.
   if (saveBtn) saveBtn.addEventListener('click', async () => {
@@ -1212,6 +1248,43 @@ function setupSettings() {
       saveBtn.disabled = false;
     }
   });
+
+}
+// Semantic-group hints: when the user's message matches a pattern, give a small
+// boost to packs whose name contains any of the fragments. Format: [RegExp, string[]].
+const RELEVANCE_HINTS = [
+  // 路由 / 路由器 / 交换机
+  [/\b路由|cisco router|路由器/,                ['cisco', 'router', 'juniper', 'h3c', 'huawei', 'ruijie', 'arista']],
+  [/\b交换|cisco switch|交换机/,                ['cisco', 'switch', 'aruba', 'huawei', 'h3c', 'ruijie', 'brocade', 'juniper']],
+  // 防火墙 / 安全
+  [/\b防火墙|firewall|utm|ips\b/,               ['forti', 'fortigate', 'palo', 'sonic', 'hillstone', 'sangfor', 'checkpoint']],
+  // 无线 / AP / Wi-Fi
+  [/\b无线|wifi|wi-fi|wireless|ap\b/,          ['wireless', 'wifi', 'meraki', 'ruckus', 'aruba', 'cisco']],
+  // 服务器 / 操作系统 / Agent
+  [/\b服务器|server|主机|linux|windows\b/,      ['linux', 'windows', 'server', 'vmware', 'esx', 'vsphere']],
+  // 存储 / 备份
+  [/\b存储|备份|storage|backup\b/,              ['storage', 'netapp', 'pure', 'veeam', 'dell', 'powervault', 'data domain']],
+  // 数据库 / 中间件
+  [/\b数据库|database|mysql|sql|exchange\b/,    ['sql', 'mysql', 'exchange', 'oracle', 'postgres', 'iis']],
+  // 云服务
+  [/\b云服务|公有云|aws|azure|aliyun|tencent/,  ['aws', 'azure', 'aliyun', 'tencent', 'huawei cloud', 'google cloud']],
+  // 厂商直呼
+  [/\b思科|cisco\b/,                            ['cisco']],
+  [/\b华三|h3c\b/,                              ['h3c']],
+  [/\b华为\b/,                                  ['huawei']],
+  [/\b阿鲁巴|aruba\b/,                          ['aruba']],
+  [/\b戴尔|dell\b/,                             ['dell']],
+  [/\b惠普|hpe|hewlett\b/,                      ['hpe', 'hp']],
+  [/\b深信服|sangfor\b/,                        ['sangfor']],
+  [/\b飞塔|forti|fortigate\b/,                  ['forti', 'fortigate']],
+  [/\b派拓|palo alto\b/,                        ['palo alto']],
+  [/\b山石|hillstone\b/,                        ['hillstone']],
+  [/\b瞻博|juniper\b/,                          ['juniper']],
+  [/\b锐捷|ruijie\b/,                           ['ruijie']],
+  [/\bvmware|vcenter|vsphere|esxi\b/,          ['vmware', 'esx', 'vsphere', 'aria']],
+  [/\bred ?hat|rhel|centos|ubuntu|debian\b/,    ['linux', 'red hat', 'rhel']],
+];
+
 function findRelevantPacks(message, packs, limit = 5) {
   if (!message || !packs || !packs.length) return [];
   const msg = String(message);
@@ -1531,9 +1604,7 @@ async function loadPacks() {
     const cfg = await loadSettings();
     if (!cfg.nms.base_url || !cfg.nms.api_key) {
       toast('请先在 ⚙ 设置中配置 NMS 端点', 'warning', 5000);
-      // auto-open settings
-      const m = document.getElementById('settingsModal');
-      if (m) m.style.display = 'flex';
+      setStatus('未配置 NMS', 'error');
       return;
     }
     const data = await invoke('list_admin_packs', { nms: nmsConfigForBackend(cfg) });

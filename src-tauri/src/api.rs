@@ -9,6 +9,7 @@ use std::time::Duration;
 
 /// Configuration for the AdminPack NMS HTTP API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NmsConfig {
     pub base_url: String,
     pub api_key: String,
