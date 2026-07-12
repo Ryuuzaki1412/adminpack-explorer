@@ -30,11 +30,24 @@ jobs:
           # Force ad-hoc signing identity ("-" is ad-hoc in codesign)
           CSC_IDENTITY: '-'
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          # Skip any team / Apple ID based signing
-          APPLE_ID: ''
-          APPLE_PASSWORD: ''
-          APPLE_TEAM_ID: ''
-        run: npm run build:clean
+          # macOS notarization requires a Team ID. Setting these to empty
+          # strings is not enough — Tauri/codesign treat "" as "configured
+          # but invalid" and try to invoke notarytool, which then fails with
+          # 'Team ID must be at least 3 characters'. We need to UNSET them
+          # at the shell level so they don't appear in env at all.
+          # Do that by prefixing the run with `env -u` rather than via
+          # GitHub's env: block above.
+        run: |
+          env -u APPLE_ID \
+              -u APPLE_PASSWORD \
+              -u APPLE_TEAM_ID \
+              -u APPLE_CERTIFICATE \
+              -u APPLE_CERTIFICATE_PASSWORD \
+              -u APPLE_API_KEY \
+              -u APPLE_API_ISSUER \
+              -u APPLE_API_KEY_PATH \
+              -u APPLE_SIGNING_IDENTITY \
+              npm run build:clean
 
       - name: Upload DMG to release
         uses: softprops/action-gh-release@v2
