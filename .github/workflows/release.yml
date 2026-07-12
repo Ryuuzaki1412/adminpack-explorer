@@ -42,3 +42,37 @@ jobs:
           files: |
             src-tauri/target/release/bundle/dmg/*.dmg
           fail_on_unmatched_files: true
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Tauri build (unsigned by default; sign via env if cert is provided)
+        env:
+          # Optional code signing. Leave unset for an unsigned build.
+          # If signing, set TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          # (see https://tauri.app/distribute/sign/windows/ — generate a .pfx once and
+          #  upload it as base64 to repo secrets).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run build:clean
+
+      - name: Upload Windows installers to release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Tauri 2 produces NSIS (.exe) and WiX (.msi) by default
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          fail_on_unmatched_files: true
