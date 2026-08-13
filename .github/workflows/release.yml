@@ -57,6 +57,9 @@ jobs:
         with:
           files: |
             src-tauri/target/release/bundle/dmg/*.dmg
+            # tauri-plugin-updater on macOS expects a .app.tar.gz,
+            # NOT the .dmg — must upload it too.
+            src-tauri/target/release/bundle/macos/*.app.tar.gz
           fail_on_unmatched_files: true
 
       - name: Generate + sign + upload latest.json
