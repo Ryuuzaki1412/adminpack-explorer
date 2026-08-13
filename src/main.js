@@ -1317,10 +1317,11 @@ async function runCheckUpdate({ showModal = true } = {}) {
 }
 
 async function setupUpdate() {
-  const btn   = document.getElementById('btnCheckUpdate');
-  const close = document.getElementById('updateClose');
-  const retry = document.getElementById('updateRetry');
-  const modal = document.getElementById('updateModal');
+  const btn       = document.getElementById('btnCheckUpdate');
+  const close     = document.getElementById('updateClose');
+  const retry     = document.getElementById('updateRetry');
+  const modal     = document.getElementById('updateModal');
+  const installBtn = document.getElementById('updateInstall');
 
   if (btn) btn.addEventListener('click', () => runCheckUpdate({ showModal: true }));
   if (close) close.addEventListener('click', hideUpdateModal);
@@ -1328,6 +1329,15 @@ async function setupUpdate() {
     if (e.target === modal) hideUpdateModal();
   });
   if (retry) retry.addEventListener('click', () => runCheckUpdate({ showModal: true }));
+  if (installBtn) installBtn.addEventListener('click', () => runInstallUpdate());
+
+  // Listen for download/install progress events emitted by the Rust side.
+  if (listen) {
+    listen('update:install:progress', (evt) => {
+      const p = evt.payload || {};
+      applyInstallProgress(p);
+    }).catch(err => _log('listen(update:install:progress) failed: ' + err, true));
+  }
 
   // Restore badge from last known state, then optionally auto-check.
   try {
@@ -1348,6 +1358,75 @@ async function setupUpdate() {
       setTimeout(() => { runCheckUpdate({ showModal: false }); }, 4000);
     }
   } catch { /* ignore */ }
+}
+
+// ============================================================
+// Install (download + install + restart)
+// ============================================================
+function showInstallProgress(show) {
+  const el = document.getElementById('updateInstallProgress');
+  if (el) el.style.display = show ? 'block' : 'none';
+}
+
+function setInstallActionsDisabled(disabled) {
+  for (const id of ['updateInstall', 'updateCopyLink', 'updateOpen']) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = disabled;
+  }
+}
+
+function applyInstallProgress(p) {
+  const fill  = document.getElementById('updateProgressFill');
+  const label = document.getElementById('updateProgressLabel');
+  const bytes = document.getElementById('updateProgressBytes');
+  const hint  = document.getElementById('updateProgressHint');
+
+  const status = p.status || 'downloading';
+  const downloaded = Number(p.bytesDownloaded || 0);
+  const total      = Number(p.contentLength || 0);
+
+  if (status === 'downloading') {
+    const pct = total > 0 ? Math.round((downloaded / total) * 100) : 0;
+    if (fill)  fill.style.width = pct + '%';
+    if (label) label.textContent = `下载中…  ${pct}%`;
+    if (bytes) {
+      const d = formatBytes(downloaded);
+      const t = total > 0 ? formatBytes(total) : '?';
+      bytes.textContent = `${d} / ${t}`;
+    }
+    if (hint)  hint.textContent = '下载完成后会自动安装并重启应用。';
+  } else if (status === 'installing') {
+    if (fill)  fill.style.width = '100%';
+    if (label) label.textContent = '正在安装…';
+    if (bytes) bytes.textContent = '';
+    if (hint)  hint.textContent = '即将自动重启,请稍候。';
+  } else if (status === 'done') {
+    if (fill)  fill.style.width = '100%';
+    if (label) label.textContent = '安装完成,正在重启…';
+  } else if (status === 'error') {
+    showInstallProgress(false);
+    setInstallActionsDisabled(false);
+    toast(`更新失败: ${p.error || '未知错误'}`, 'error', 6000);
+  }
+}
+
+async function runInstallUpdate() {
+  if (!invoke) {
+    toast('Tauri invoke 不可用', 'error');
+    return;
+  }
+  // Switch UI into "downloading" state inside the available card.
+  showInstallProgress(true);
+  setInstallActionsDisabled(true);
+  applyInstallProgress({ status: 'downloading', bytesDownloaded: 0, contentLength: 0 });
+
+  try {
+    await invoke('cmd_install_update');
+    // The Rust side restarts the app; we never reach here on success.
+  } catch (err) {
+    _log('install_update failed: ' + err, true);
+    applyInstallProgress({ status: 'error', error: String(err && err.message ? err.message : err) });
+  }
 }
 
 

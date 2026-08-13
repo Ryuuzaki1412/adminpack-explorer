@@ -2047,3 +2047,36 @@ body {
   box-shadow: 0 0 0 2px var(--bg);
   pointer-events: none;
 }
+
+/* Auto-install progress (shown inside update modal after user clicks
+ * "立即更新并重启") */
+.update-install-progress {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.update-progress-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.update-progress-bytes {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.update-progress-bar {
+  width: 100%;
+  margin-bottom: 6px;
+}
+.update-progress-hint {
+  font-size: 11px;
+  color: var(--text-subtle);
+  text-align: center;
+}

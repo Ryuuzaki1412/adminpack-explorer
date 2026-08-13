@@ -530,11 +530,112 @@ fn build_context(pack: &AdminPack, data: &Value) -> String {
     serde_json::to_string(&summary).unwrap_or_else(|_| "{}".to_string())
 }
 
+// ============================================================
+// Auto-update (tauri-plugin-updater) — frontend-facing wrappers
+// ============================================================
+//
+// Two commands are exposed so the JS side never has to touch
+// tauri_plugin_updater directly:
+//
+//   • `cmd_install_update()`        — download + install + restart
+//   • `cmd_postpone_update()`       — record "user declined" so we
+//                                     can skip the badge until next
+//                                     release
+//
+// Both go through the configured endpoint in tauri.conf.json
+// (plugins.updater.endpoints) and use the pubkey there for signature
+// verification. The Rust side does not need the private key — that
+// lives in CI secrets only.
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct InstallUpdateProgress {
+    /// bytes downloaded so far (0 when not started / on errors)
+    bytes_downloaded: u64,
+    /// total content length (0 when unknown)
+    content_length: u64,
+    /// Human-readable status: "downloading", "installing", "done", "error"
+    status: String,
+    /// Optional error message when status == "error"
+    error: Option<String>,
+}
+
+#[tauri::command]
+async fn cmd_install_update(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    // 1. Check (also re-verifies signature against embedded pubkey)
+    let update = app
+        .updater()
+        .map_err(|e| format!("updater init failed: {e}"))?
+        .check()
+        .await
+        .map_err(|e| format!("检查更新失败: {e}"))?;
+
+    let Some(update) = update else {
+        return Err("没有可用更新".to_string());
+    };
+
+    // 2. Download + install (emits "update:install:progress" events so
+    //    the frontend can show a determinate progress bar).
+    let app_chunk = app.clone();
+    let app_finish = app.clone();
+    update
+        .download_and_install(
+            move |chunk_len, content_len| {
+                let _ = app_chunk.emit(
+                    "update:install:progress",
+                    InstallUpdateProgress {
+                        bytes_downloaded: chunk_len as u64,
+                        content_length: content_len.unwrap_or(0),
+                        status: "downloading".to_string(),
+                        error: None,
+                    },
+                );
+            },
+            move || {
+                let _ = app_finish.emit(
+                    "update:install:progress",
+                    InstallUpdateProgress {
+                        bytes_downloaded: 0,
+                        content_length: 0,
+                        status: "installing".to_string(),
+                        error: None,
+                    },
+                );
+            },
+        )
+        .await
+        .map_err(|e| format!("下载/安装失败: {e}"))?;
+
+    // 3. Tell the frontend we're about to restart, then restart.
+    let _ = app.emit(
+        "update:install:progress",
+        InstallUpdateProgress {
+            bytes_downloaded: 0,
+            content_length: 0,
+            status: "done".to_string(),
+            error: None,
+        },
+    );
+    app.restart();
+}
+
+#[tauri::command]
+fn cmd_postpone_update() -> Result<(), String> {
+    // Frontend persists the dismissal in its own tauri-plugin-store,
+    // so this is a no-op for now. Exists so the UI has a stable hook
+    // to call without throwing "command not found" if we ever want to
+    // track server-side dismissals.
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = dotenvy::dotenv();
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             list_admin_packs,
@@ -545,6 +646,8 @@ pub fn run() {
             cmd_test_ai,
             cmd_ai_chat_global,
             cmd_check_update,
+            cmd_install_update,
+            cmd_postpone_update,
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())

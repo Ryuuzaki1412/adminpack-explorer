@@ -239,9 +239,22 @@
             <ul class="update-assets" id="updateAssets"></ul>
           </div>
 
-          <div class="update-actions">
+          <div class="update-actions" id="updateAvailableActions">
             <button class="btn-secondary" id="updateCopyLink">复制 release 链接</button>
-            <button class="btn-primary" id="updateOpen">前往 GitHub 下载</button>
+            <button class="btn-primary" id="updateInstall">立即更新并重启</button>
+            <button class="btn-secondary" id="updateOpen">前往 GitHub 下载</button>
+          </div>
+
+          <!-- Auto-install progress (shown after the user clicks "立即更新并重启") -->
+          <div class="update-install-progress" id="updateInstallProgress" style="display:none">
+            <div class="update-progress-row">
+              <span id="updateProgressLabel">准备下载…</span>
+              <span id="updateProgressBytes" class="update-progress-bytes">0 / 0</span>
+            </div>
+            <div class="preload-bar update-progress-bar">
+              <div class="preload-bar-fill" id="updateProgressFill"></div>
+            </div>
+            <div class="update-progress-hint" id="updateProgressHint">下载完成后会自动安装并重启应用。</div>
           </div>
         </div>
 
