@@ -138,6 +138,18 @@ async function saveSettings(cfg) {
 }
 
 
+// Read the current app version from the Rust side (set in
+// `tauri.conf.json` / `Cargo.toml`) and render it in the titlebar.
+async function refreshAppVersion() {
+  const el = document.getElementById('appVersion');
+  if (!el) return;
+  let v = '';
+  try {
+    if (invoke) v = await invoke('cmd_app_version');
+  } catch (e) { _log('cmd_app_version failed: ' + e, true); }
+  el.textContent = v ? `v${v}` : 'v?';
+}
+
 // Update the brand bar's NMS endpoint label from saved settings
 async function refreshApiHost() {
   const el = document.getElementById('apiHost');
@@ -220,6 +232,42 @@ function escapeHTML(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
+}
+
+// ============================================================
+// VENDOR ICON
+// ============================================================
+//
+// Vendors with a custom logo file under `src/assets/logos/<Name>.png`
+// get their logo rendered; everything else falls back to the first
+// letter of the vendor name (the original behaviour). Add more
+// vendors here as logos land.
+
+const VENDOR_LOGOS = {
+  // Map exact pack name → logo file (without leading "assets/logos/")
+  'Aruba': 'Aruba.png',
+  // Add more as logos are dropped into src/assets/logos/
+};
+
+function vendorLogoPath(name) {
+  if (!name) return null;
+  // Try exact match first, then case-insensitive.
+  if (VENDOR_LOGOS[name]) return `assets/logos/${VENDOR_LOGOS[name]}`;
+  const key = Object.keys(VENDOR_LOGOS).find(k => k.toLowerCase() === name.toLowerCase());
+  return key ? `assets/logos/${VENDOR_LOGOS[key]}` : null;
+}
+
+function setVendorIcon(name) {
+  const el = document.getElementById('vendorIcon');
+  if (!el) return;
+  const logo = vendorLogoPath(name);
+  if (logo) {
+    // Use an <img>; alt= keeps it accessible; onerror falls back
+    // gracefully if the file is missing (404).
+    el.innerHTML = `<img class="vendor-icon-img" src="${escapeHTML(logo)}" alt="${escapeHTML(name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escapeHTML((name||'?').charAt(0).toUpperCase())}'}))">`;
+  } else {
+    el.textContent = (name || '?').charAt(0).toUpperCase();
+  }
 }
 
 // ============================================================
@@ -573,7 +621,7 @@ function showDetailLoading(pack) {
   setText('vendorName', pack.name || '');
   setText('vendorDesc', pack.description || '—');
   setText('vendorVersion', `v${pack.version ?? '?'}`);
-  setText('vendorIcon', (pack.name || '?').charAt(0).toUpperCase());
+  setVendorIcon(pack.name || '');
 
   // Reset approach pill + count to placeholder while data loads
   const approachEl = document.getElementById('vendorApproach');
@@ -2122,7 +2170,10 @@ function init() {
     }).catch(err => _log('listen failed: ' + err, true));
   }
 
-  loadPacks().then(() => { updateCacheStats(); refreshApiHost(); });
+  loadPacks().then(() => { updateCacheStats(); refreshApiHost(); refreshAppVersion(); });
+  // App version doesn't depend on NMS, set it eagerly so the titlebar
+  // doesn't flicker through "v—".
+  refreshAppVersion();
 }
 
 window.toggleSection = toggleSection;

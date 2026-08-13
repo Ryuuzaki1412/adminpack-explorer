@@ -630,6 +630,11 @@ fn cmd_postpone_update() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn cmd_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = dotenvy::dotenv();
@@ -648,6 +653,7 @@ pub fn run() {
             cmd_check_update,
             cmd_install_update,
             cmd_postpone_update,
+            cmd_app_version,
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())
