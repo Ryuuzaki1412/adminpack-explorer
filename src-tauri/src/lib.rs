@@ -116,6 +116,218 @@ async fn cmd_test_ai(
         .map_err(|e| e.to_string())
 }
 
+// ============================================================
+// Update check (GitHub Releases API)
+// ============================================================
+
+const GITHUB_REPO: &str = "Ryuuzaki1412/adminpack-explorer";
+const GITHUB_API_URL: &str = "https://api.github.com";
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct UpdateAsset {
+    name: String,
+    url: String,
+    size: u64,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct UpdateInfo {
+    available: bool,
+    current_version: String,
+    latest_version: String,
+    release_name: String,
+    release_notes: String,
+    release_url: String,
+    published_at: String,
+    assets: Vec<UpdateAsset>,
+    /// True if the call hit GitHub successfully (false means network/error).
+    reachable: bool,
+    /// Human-readable error when reachable = false.
+    error: Option<String>,
+}
+
+/// Simple semver compare: returns true if `latest` > `current`.
+/// Handles `v0.1.3` / `0.1.3` / `0.1.3-beta.1` (pre-release < release).
+fn is_newer_version(latest: &str, current: &str) -> bool {
+    let strip = |v: &str| v.trim_start_matches('v').to_string();
+    fn rank(pre: &str) -> u8 {
+        // 0 = stable, 1 = pre-release, 2 = dev/rc/etc.
+        if pre.is_empty() { 0 }
+        else if pre.starts_with("rc") || pre.starts_with("dev") { 2 }
+        else { 1 }
+    }
+    let parse = |v: &str| -> (Vec<u64>, String, u8) {
+        let s = strip(v);
+        // Split off pre-release (everything after '-')
+        let (main, pre) = match s.split_once('-') {
+            Some((m, p)) => (m, p.to_string()),
+            None => (s.as_str(), String::new()),
+        };
+        let rk = rank(&pre);
+        let nums: Vec<u64> = main.split('.').filter_map(|p| p.parse::<u64>().ok()).collect();
+        (nums, pre, rk)
+    };
+    let (l_nums, l_pre, l_rank) = parse(latest);
+    let (c_nums, c_pre, c_rank) = parse(current);
+    let max = std::cmp::max(l_nums.len(), c_nums.len());
+    for i in 0..max {
+        let l = l_nums.get(i).copied().unwrap_or(0);
+        let c = c_nums.get(i).copied().unwrap_or(0);
+        if l > c { return true; }
+        if l < c { return false; }
+    }
+    // Major.minor.patch equal: rank decides.
+    // - both stable: equal → false
+    // - latest is pre, current is stable: latest < current (not newer)
+    // - latest is stable, current is pre: latest > current (newer)
+    // - both pre: compare pre strings lexicographically as a tiebreaker
+    if l_rank == c_rank {
+        match (l_pre.is_empty(), c_pre.is_empty()) {
+            (true, true) => false,
+            (false, true) => false,   // latest is pre, current is stable → not newer
+            (true, false) => true,    // latest is stable, current is pre → newer
+            (false, false) => l_pre > c_pre,
+        }
+    } else {
+        // Lower rank = more stable. A stable is "newer" than any pre-release of same M.m.p.
+        l_rank < c_rank
+    }
+}
+
+#[tauri::command]
+async fn cmd_check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
+    let current_version = app.package_info().version.to_string();
+    let url = format!("{}/repos/{}/releases/latest", GITHUB_API_URL, GITHUB_REPO);
+
+    let client = match reqwest::Client::builder()
+        .user_agent(format!("AdminPack-Explorer/{}", current_version))
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return Ok(UpdateInfo {
+                available: false,
+                current_version: current_version.clone(),
+                latest_version: String::new(),
+                release_name: String::new(),
+                release_notes: String::new(),
+                release_url: String::new(),
+                published_at: String::new(),
+                assets: vec![],
+                reachable: false,
+                error: Some(format!("构建 HTTP 客户端失败: {e}")),
+            });
+        }
+    };
+
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            return Ok(UpdateInfo {
+                available: false,
+                current_version: current_version.clone(),
+                latest_version: String::new(),
+                release_name: String::new(),
+                release_notes: String::new(),
+                release_url: String::new(),
+                published_at: String::new(),
+                assets: vec![],
+                reachable: false,
+                error: Some(format!("网络错误: {e}")),
+            });
+        }
+    };
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(UpdateInfo {
+            available: false,
+            current_version: current_version.clone(),
+            latest_version: String::new(),
+            release_name: String::new(),
+            release_notes: String::new(),
+            release_url: String::new(),
+            published_at: String::new(),
+            assets: vec![],
+            reachable: true,
+            error: Some("仓库尚无任何 release,请稍后再试。".to_string()),
+        });
+    }
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Ok(UpdateInfo {
+            available: false,
+            current_version: current_version.clone(),
+            latest_version: String::new(),
+            release_name: String::new(),
+            release_notes: String::new(),
+            release_url: String::new(),
+            published_at: String::new(),
+            assets: vec![],
+            reachable: false,
+            error: Some(format!("GitHub API 返回 {}: {}", status, body.chars().take(200).collect::<String>())),
+        });
+    }
+
+    let body: Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            return Ok(UpdateInfo {
+                available: false,
+                current_version: current_version.clone(),
+                latest_version: String::new(),
+                release_name: String::new(),
+                release_notes: String::new(),
+                release_url: String::new(),
+                published_at: String::new(),
+                assets: vec![],
+                reachable: false,
+                error: Some(format!("解析响应失败: {e}")),
+            });
+        }
+    };
+
+    let tag = body.get("tag_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let latest_version = tag.trim_start_matches('v').to_string();
+    let release_name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let release_notes = body.get("body").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let release_url = body.get("html_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let published_at = body.get("published_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+    let assets: Vec<UpdateAsset> = body
+        .get("assets")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|a| UpdateAsset {
+                    name: a.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    url: a.get("browser_download_url").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    size: a.get("size").and_then(|v| v.as_u64()).unwrap_or(0),
+                })
+                .filter(|a| !a.name.is_empty() && !a.url.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let available = !latest_version.is_empty() && is_newer_version(&latest_version, &current_version);
+
+    Ok(UpdateInfo {
+        available,
+        current_version,
+        latest_version,
+        release_name,
+        release_notes,
+        release_url,
+        published_at,
+        assets,
+        reachable: true,
+        error: None,
+    })
+}
+
 /// One image attachment sent from the JS chat UI.
 /// Field names use `camelCase` on the wire (`mediaType`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -332,6 +544,7 @@ pub fn run() {
             clear_cache,
             cmd_test_ai,
             cmd_ai_chat_global,
+            cmd_check_update,
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())

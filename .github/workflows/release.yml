@@ -56,6 +56,20 @@ jobs:
             src-tauri/target/release/bundle/dmg/*.dmg
           fail_on_unmatched_files: true
 
+      - name: Generate + upload latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/generate-latest-json.sh
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          ./scripts/generate-latest-json.sh "${VERSION}" \
+            "${{ github.repository }}" \
+            "https://github.com/${{ github.repository }}/releases/tag/${TAG}"
+          # Replace any previous latest.json asset on this release, then upload the new one.
+          gh release upload "${TAG}" latest.json --clobber --repo "${{ github.repository }}"
+
   build-windows:
     runs-on: windows-latest
     steps:
@@ -89,3 +103,16 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
           fail_on_unmatched_files: true
+
+      - name: Generate + upload latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/generate-latest-json.sh
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          ./scripts/generate-latest-json.sh "${VERSION}" \
+            "${{ github.repository }}" \
+            "https://github.com/${{ github.repository }}/releases/tag/${TAG}"
+          gh release upload "${TAG}" latest.json --clobber --repo "${{ github.repository }}"

@@ -26,6 +26,7 @@ function _log(msg, isErr = false) {
     while (_logEl.childElementCount > 300) _logEl.removeChild(_logEl.firstChild);
     _logEl.scrollTop = _logEl.scrollHeight;
   }
+  if (isErr) bumpLogBadge();
 }
 function _flushLogTo(el) {
   _logEl = el;
@@ -1015,11 +1016,65 @@ function setupSearch() {
 }
 
 function setupStatusTabs() {
-  document.querySelectorAll('.status-tab').forEach(t => {
+  const tabs = document.querySelectorAll('.status-tab');
+  const panel = document.getElementById('logPanel');
+  const body = document.getElementById('logPanelBody');
+  const closeBtn = document.getElementById('logCloseBtn');
+  const clearBtn = document.getElementById('logClearBtn');
+  const copyBtn = document.getElementById('logCopyBtn');
+
+  tabs.forEach(t => {
     t.addEventListener('click', () => {
-      document.querySelectorAll('.status-tab').forEach(s => s.classList.toggle('active', s === t));
+      tabs.forEach(s => s.classList.toggle('active', s === t));
+      const which = t.dataset.status;
+      if (which === 'log') {
+        if (panel) {
+          panel.style.display = 'flex';
+          // First time opening → flush buffered log lines into the panel.
+          if (!_logEl && body) _flushLogTo(body);
+          _logEl = body;
+          if (body) body.scrollTop = body.scrollHeight;
+          clearLogBadge();
+        }
+      } else {
+        if (panel) panel.style.display = 'none';
+      }
     });
   });
+
+  if (closeBtn) closeBtn.addEventListener('click', () => {
+    if (panel) panel.style.display = 'none';
+    tabs.forEach(s => s.classList.toggle('active', s.dataset.status === 'info'));
+  });
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    if (body) body.innerHTML = '';
+  });
+  if (copyBtn) copyBtn.addEventListener('click', async () => {
+    if (!body) return;
+    const text = Array.from(body.children).map(n => n.textContent).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('日志已复制', 'success', 1500);
+    } catch (e) {
+      _log('copy log failed: ' + e, true);
+      toast('复制失败', 'error');
+    }
+  });
+}
+
+// Red badge on the 日志 tab — shows count of error lines since last open.
+let _logErrCount = 0;
+function bumpLogBadge() {
+  _logErrCount += 1;
+  const badge = document.getElementById('statusLogBadge');
+  if (!badge) return;
+  badge.style.display = 'inline-block';
+  badge.textContent = _logErrCount > 99 ? '99+' : String(_logErrCount);
+}
+function clearLogBadge() {
+  _logErrCount = 0;
+  const badge = document.getElementById('statusLogBadge');
+  if (badge) { badge.style.display = 'none'; badge.textContent = '0'; }
 }
 
 function setupRawActions() {
@@ -1051,8 +1106,251 @@ function setupRawActions() {
 }
 
 // ============================================================
-// SETTINGS MODAL
+// UPDATE CHECK
 // ============================================================
+const UPDATE_REPO_URL = 'https://github.com/Ryuuzaki1412/adminpack-explorer';
+const UPDATE_AUTO_CHECK_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h
+
+function formatBytes(n) {
+  if (!n || n <= 0) return '';
+  const u = ['B','KB','MB','GB','TB'];
+  let i = 0; let v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${u[i]}`;
+}
+
+function formatDateTime(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch { return ''; }
+}
+
+function openExternalLink(url) {
+  // Tauri 2 webview blocks window.open(); use a synthetic anchor with
+  // target=_blank — the webview will delegate the user-initiated
+  // navigation to the OS default browser. Falls back to copy if that
+  // somehow doesn't trigger.
+  if (!url) return;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => a.remove(), 0);
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch { return false; }
+  }
+}
+
+let _updateBusy = false;
+let _updateLastInfo = null;
+
+function setUpdateBadgeVisible(show) {
+  const dot = document.getElementById('updateDot');
+  if (dot) dot.style.display = show ? 'block' : 'none';
+}
+
+function setUpdateState(which) {
+  // which = 'loading' | 'uptodate' | 'available' | 'error'
+  const ids = {
+    loading:   'updateLoading',
+    uptodate:  'updateUptodate',
+    available: 'updateAvailable',
+    error:     'updateError',
+  };
+  for (const [k, id] of Object.entries(ids)) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = k === which ? '' : 'none';
+  }
+}
+
+function showUpdateModal() {
+  const modal = document.getElementById('updateModal');
+  if (modal) modal.style.display = 'flex';
+}
+function hideUpdateModal() {
+  const modal = document.getElementById('updateModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderUpdateInfo(info) {
+  if (!info || !info.reachable) {
+    setUpdateState('error');
+    const detail = document.getElementById('updateErrorDetail');
+    if (detail) detail.textContent = (info && info.error) || '未知错误';
+    return;
+  }
+  if (info.available) {
+    setUpdateState('available');
+    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v || ''; };
+    setText('updateLatestVersion',   info.latestVersion);
+    setText('updateCurrentVersion2', info.currentVersion);
+    setText('updateLatestVersion2',  info.latestVersion);
+    setText('updatePublishedAt2',    formatDateTime(info.publishedAt));
+    setText('updateReleaseName',     info.releaseName || `(v${info.latestVersion})`);
+
+    // Release notes — render as markdown for nice formatting
+    const notesEl = document.getElementById('updateNotes');
+    if (notesEl) {
+      notesEl.innerHTML = info.releaseNotes
+        ? renderMarkdown(info.releaseNotes)
+        : '';
+    }
+
+    // Assets
+    const assetsEl  = document.getElementById('updateAssets');
+    const sectionEl = document.getElementById('updateAssetsSection');
+    if (assetsEl && sectionEl) {
+      if (info.assets && info.assets.length) {
+        sectionEl.style.display = '';
+        assetsEl.innerHTML = info.assets.map(a => `
+          <li>
+            <span class="update-asset-name" title="${escapeHTML(a.url)}">${escapeHTML(a.name)}</span>
+            <span class="update-asset-size">${escapeHTML(formatBytes(a.size))}</span>
+          </li>
+        `).join('');
+      } else {
+        sectionEl.style.display = 'none';
+      }
+    }
+
+    // Action buttons
+    const openBtn = document.getElementById('updateOpen');
+    if (openBtn) {
+      openBtn.onclick = () => {
+        const url = info.releaseUrl || `${UPDATE_REPO_URL}/releases/tag/v${info.latestVersion}`;
+        openExternalLink(url);
+      };
+    }
+    const copyBtn = document.getElementById('updateCopyLink');
+    if (copyBtn) {
+      copyBtn.onclick = async () => {
+        const url = info.releaseUrl || `${UPDATE_REPO_URL}/releases/tag/v${info.latestVersion}`;
+        const ok = await copyToClipboard(url);
+        toast(ok ? '已复制 release 链接' : '复制失败', ok ? 'success' : 'error');
+      };
+    }
+    setUpdateBadgeVisible(true);
+  } else {
+    setUpdateState('uptodate');
+    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v || ''; };
+    setText('updateCurrentVersion', info.currentVersion);
+    setText('updateLatestVersionEq',
+      info.latestVersion ? info.latestVersion : info.currentVersion);
+    setText('updatePublishedAt', info.publishedAt ? `发布于 ${formatDateTime(info.publishedAt)}` : '');
+    setUpdateBadgeVisible(false);
+  }
+}
+
+async function runCheckUpdate({ showModal = true } = {}) {
+  if (_updateBusy) return;
+  if (!invoke) {
+    if (showModal) {
+      showUpdateModal();
+      setUpdateState('error');
+      const detail = document.getElementById('updateErrorDetail');
+      if (detail) detail.textContent = 'Tauri invoke 不可用';
+    }
+    return;
+  }
+  _updateBusy = true;
+  const btn = document.getElementById('btnCheckUpdate');
+  if (btn) btn.classList.add('loading');
+  if (showModal) {
+    showUpdateModal();
+    setUpdateState('loading');
+  }
+  try {
+    const info = await invoke('cmd_check_update');
+    _updateLastInfo = info;
+    renderUpdateInfo(info);
+    // Persist last-check info so we can show a badge across restarts
+    try {
+      const s = await getStore();
+      if (s) {
+        await s.set('update.last_check', Date.now());
+        if (info && info.reachable) {
+          await s.set('update.last_info', {
+            available: !!info.available,
+            currentVersion: info.currentVersion,
+            latestVersion: info.latestVersion,
+            publishedAt: info.publishedAt,
+          });
+        }
+        if (s.save) await s.save();
+      }
+    } catch { /* ignore persistence errors */ }
+    return info;
+  } catch (err) {
+    _log(`check_update failed: ${err}`, true);
+    if (showModal) {
+      setUpdateState('error');
+      const detail = document.getElementById('updateErrorDetail');
+      if (detail) detail.textContent = String(err && err.message ? err.message : err);
+    }
+    return null;
+  } finally {
+    _updateBusy = false;
+    if (btn) btn.classList.remove('loading');
+  }
+}
+
+async function setupUpdate() {
+  const btn   = document.getElementById('btnCheckUpdate');
+  const close = document.getElementById('updateClose');
+  const retry = document.getElementById('updateRetry');
+  const modal = document.getElementById('updateModal');
+
+  if (btn) btn.addEventListener('click', () => runCheckUpdate({ showModal: true }));
+  if (close) close.addEventListener('click', hideUpdateModal);
+  if (modal) modal.addEventListener('click', (e) => {
+    if (e.target === modal) hideUpdateModal();
+  });
+  if (retry) retry.addEventListener('click', () => runCheckUpdate({ showModal: true }));
+
+  // Restore badge from last known state, then optionally auto-check.
+  try {
+    const s = await getStore();
+    if (s) {
+      const last = await s.get('update.last_info');
+      if (last && last.available) setUpdateBadgeVisible(true);
+    }
+  } catch { /* ignore */ }
+
+  // Auto-check on startup (silent, won't pop modal) if it's been > cooldown
+  try {
+    const s = await getStore();
+    const lastTs = s ? await s.get('update.last_check') : null;
+    const due = !lastTs || (Date.now() - Number(lastTs)) > UPDATE_AUTO_CHECK_COOLDOWN_MS;
+    if (due) {
+      // Delay so it doesn't race with initial vendor load
+      setTimeout(() => { runCheckUpdate({ showModal: false }); }, 4000);
+    }
+  } catch { /* ignore */ }
+}
+
+
 let _settings = { ...SETTINGS_DEFAULTS };
 let _chatHistory = []; // [{role, content}]
 
@@ -1708,6 +2006,10 @@ async function refreshAndPreloadAll() {
       hidePreloadOverlay(0);
       setStatus('预加载失败', 'error');
       toast(`预加载失败: ${err}`, 'error', 5000);
+      // Detailed diagnostic in the 日志 panel (incl. HTTP status / body / url).
+      const detail = (err && err.stack) ? err.stack : String(err);
+      _log(`预加载失败 (detail): ${detail}`, true);
+      _log(`提示:打开左下角"日志"菜单可查看完整响应内容`, true);
     }
     await updateCacheStats();
   } finally {
@@ -1727,6 +2029,7 @@ function init() {
   setupRawActions();
   setupSettings();
   setupChat();
+  setupUpdate();
 
   const r = document.getElementById('btnRefresh');
   if (r) r.addEventListener('click', () => refreshAndPreloadAll());
