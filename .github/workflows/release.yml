@@ -57,15 +57,19 @@ jobs:
           set -euo pipefail
           cd src-tauri/target/release/bundle/macos
           # Tauri names the .app directory like "ProductName.app" (no arch
-          # suffix in the directory name itself). Produce a single
-          # ".app.tar.gz" alongside the .app so the upload step finds it.
+          # suffix in the directory name itself). Produce a per-arch
+          # .app.tar.gz with explicit version+arch in the filename so it
+          # matches the naming convention of the DMG and Windows installers
+          # already produced by the build.
           # COPYFILE_DISABLE=1 + --no-mac-metadata so macOS does not embed
           # AppleDouble (._*) files — Tauri updater's GzDecoder refuses to
           # unpack those.
+          VERSION=$(jq -r .version ../tauri.conf.json)
+          ARCH=$(uname -m)
           for d in *.app; do
             [ -d "$d" ] || continue
             COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata \
-              -czf "${d}.tar.gz" "$d"
+              -czf "AdminPack.Explorer_${VERSION}_${ARCH}.app.tar.gz" "$d"
           done
           ls -la *.app.tar.gz
 
