@@ -238,36 +238,16 @@ function escapeHTML(s) {
 // VENDOR ICON
 // ============================================================
 //
-// Vendors with a custom logo file under `src/assets/logos/<Name>.png`
-// get their logo rendered; everything else falls back to the first
-// letter of the vendor name (the original behaviour). Add more
-// vendors here as logos land.
-
-const VENDOR_LOGOS = {
-  // Map exact pack name → logo file (without leading "assets/logos/")
-  'Aruba': 'Aruba.png',
-  // Add more as logos are dropped into src/assets/logos/
-};
-
-function vendorLogoPath(name) {
-  if (!name) return null;
-  // Try exact match first, then case-insensitive.
-  if (VENDOR_LOGOS[name]) return `assets/logos/${VENDOR_LOGOS[name]}`;
-  const key = Object.keys(VENDOR_LOGOS).find(k => k.toLowerCase() === name.toLowerCase());
-  return key ? `assets/logos/${VENDOR_LOGOS[key]}` : null;
-}
+// Logo lookup is currently disabled — the trial Aruba logo rendered
+// poorly inside the 44x44 square (wide rectangle, cropped badly).
+// We fall back to the first letter of the vendor name (the original
+// behaviour). Re-enable by restoring the VENDOR_LOGOS map + the
+// <img> branch in setVendorIcon().
 
 function setVendorIcon(name) {
   const el = document.getElementById('vendorIcon');
   if (!el) return;
-  const logo = vendorLogoPath(name);
-  if (logo) {
-    // Use an <img>; alt= keeps it accessible; onerror falls back
-    // gracefully if the file is missing (404).
-    el.innerHTML = `<img class="vendor-icon-img" src="${escapeHTML(logo)}" alt="${escapeHTML(name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escapeHTML((name||'?').charAt(0).toUpperCase())}'}))">`;
-  } else {
-    el.textContent = (name || '?').charAt(0).toUpperCase();
-  }
+  el.textContent = (name || '?').charAt(0).toUpperCase();
 }
 
 // ============================================================
