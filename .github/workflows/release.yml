@@ -52,6 +52,23 @@ jobs:
               -u APPLE_SIGNING_IDENTITY \
               npm run build:clean
 
+      - name: Package macOS .app.tar.gz (updater needs this, not the DMG)
+        run: |
+          set -euo pipefail
+          cd src-tauri/target/release/bundle/macos
+          # Tauri names the .app directory like "ProductName.app" (no arch
+          # suffix in the directory name itself). Produce a single
+          # ".app.tar.gz" alongside the .app so the upload step finds it.
+          # COPYFILE_DISABLE=1 + --no-mac-metadata so macOS does not embed
+          # AppleDouble (._*) files — Tauri updater's GzDecoder refuses to
+          # unpack those.
+          for d in *.app; do
+            [ -d "$d" ] || continue
+            COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata \
+              -czf "${d}.tar.gz" "$d"
+          done
+          ls -la *.app.tar.gz
+
       - name: Upload DMG to release
         uses: softprops/action-gh-release@v2
         with:
