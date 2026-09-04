@@ -64,7 +64,11 @@ jobs:
           # COPYFILE_DISABLE=1 + --no-mac-metadata so macOS does not embed
           # AppleDouble (._*) files — Tauri updater's GzDecoder refuses to
           # unpack those.
-          VERSION=$(jq -r .version ../tauri.conf.json)
+          # Derive version from the tag (GITHUB_REF_NAME = "v0.1.10") to
+          # avoid relying on a relative path to tauri.conf.json (we are
+          # `cd`'d into the bundle/macos/ directory by this point, so a
+          # relative path is fragile).
+          VERSION="${GITHUB_REF_NAME#v}"
           ARCH=$(uname -m)
           for d in *.app; do
             [ -d "$d" ] || continue
