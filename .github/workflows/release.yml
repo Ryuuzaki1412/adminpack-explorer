@@ -105,7 +105,20 @@ jobs:
             "https://github.com/${{ github.repository }}/releases/tag/${TAG}"
           # Sign latest.json with the embedded private key so the installed
           # app can verify authenticity via the pubkey in tauri.conf.json.
-          cargo-tauri signer sign -f latest.json
+          # tauri-cli >= 2.5 dropped the --private-key flag and only accepts
+          # --private-key-path. Materialise the env-var-supplied key
+          # (content or already-a-path) into a file and pass that.
+          KEY_PATH=/tmp/tauri-key
+          if [[ -f "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+            KEY_PATH="${TAURI_SIGNING_PRIVATE_KEY}"
+          else
+            printf '%s' "${TAURI_SIGNING_PRIVATE_KEY}" > "${KEY_PATH}"
+          fi
+          cargo-tauri signer sign \
+            --private-key-path "${KEY_PATH}" \
+            --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}" \
+            latest.json
+          rm -f "${KEY_PATH}" 2>/dev/null || true
           # Replace any previous latest.json asset on this release.
           gh release upload "${TAG}" latest.json --clobber --repo "${{ github.repository }}"
 
@@ -159,5 +172,18 @@ jobs:
           ./scripts/generate-latest-json.sh "${VERSION}" \
             "${{ github.repository }}" \
             "https://github.com/${{ github.repository }}/releases/tag/${TAG}"
-          cargo-tauri signer sign -f latest.json
+          # tauri-cli >= 2.5 dropped the --private-key flag and only accepts
+          # --private-key-path. Materialise the env-var-supplied key
+          # (content or already-a-path) into a file and pass that.
+          KEY_PATH=/tmp/tauri-key
+          if [[ -f "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+            KEY_PATH="${TAURI_SIGNING_PRIVATE_KEY}"
+          else
+            printf '%s' "${TAURI_SIGNING_PRIVATE_KEY}" > "${KEY_PATH}"
+          fi
+          cargo-tauri signer sign \
+            --private-key-path "${KEY_PATH}" \
+            --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}" \
+            latest.json
+          rm -f "${KEY_PATH}" 2>/dev/null || true
           gh release upload "${TAG}" latest.json --clobber --repo "${{ github.repository }}"
