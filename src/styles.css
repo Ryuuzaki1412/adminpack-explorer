@@ -1585,10 +1585,12 @@ body {
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+  /* Default visible (low opacity) so users can find it without hovering;
+     hover raises opacity for the same visual feedback as before. */
+  opacity: 0.45;
 }
 .chat-msg.assistant:hover .chat-msg-copy,
+.chat-msg-copy:hover,
 .chat-msg-copy:focus-visible,
 .chat-msg-copy.copied {
   opacity: 1;

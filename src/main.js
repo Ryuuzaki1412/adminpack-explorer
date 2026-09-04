@@ -1772,6 +1772,24 @@ function setupChat() {
   // { data: base64, media_type: 'image/png' }[]
   let _pendingImages = [];
 
+  // === Restore previously-saved chat window size ===
+  (async () => {
+    try {
+      const s = await getStore();
+      if (!s || !win) return;
+      const saved = await s.get('chat.window_size');
+      if (saved && typeof saved.width === 'number' && typeof saved.height === 'number') {
+        const minW = 320, minH = 360;
+        const maxW = window.innerWidth - 32;
+        const maxH = window.innerHeight - 100;
+        const w = Math.max(minW, Math.min(maxW, saved.width));
+        const h = Math.max(minH, Math.min(maxH, saved.height));
+        win.style.width = w + 'px';
+        win.style.height = h + 'px';
+      }
+    } catch { /* ignore */ }
+  })();
+
   const openChat = () => {
     if (!win) return;
     win.style.display = 'flex';
@@ -1785,7 +1803,7 @@ function setupChat() {
         `- \`Red Hat Enterprise Linux 9.7 服务器怎么监控?\`\n` +
         `- \`无线 AP 控制器能监控哪些指标?\`\n` +
         `- \`存储相关有哪些 AdminPack?\`\n\n` +
-        `下方有快捷问题可以直接点。也可以点击 📎 上传图片。`
+        `下方有快捷问题可以直接点。也可以点击 📎 或直接 **粘贴(Ctrl/⌘+V)** 上传图片。`
       );
     }
     if (input) setTimeout(() => input.focus(), 100);
@@ -1794,6 +1812,33 @@ function setupChat() {
 
   if (fab) fab.addEventListener('click', openChat);
   if (closeBtn) closeBtn.addEventListener('click', closeChat);
+
+  // === Paste images from clipboard (Ctrl+V / ⌘+V on the chat window) ===
+  // Handles both pasting into the textarea (text goes through normally)
+  // and pasting an image directly (becomes a pending attachment).
+  if (win) {
+    win.addEventListener('paste', (e) => {
+      if (!e.clipboardData) return;
+      const items = e.clipboardData.items;
+      if (!items) return;
+      let pastedImage = false;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            handleFiles([file]);
+            pastedImage = true;
+          }
+        }
+      }
+      // If we attached an image, suppress the default text-insert so the
+      // image doesn't end up pasted as a useless data URL string in the
+      // textarea. Plain-text pastes still go through untouched because
+      // `pastedImage` stays false.
+      if (pastedImage) e.preventDefault();
+    });
+  }
 
   // Suggestion chips → fill input + auto-send
   if (suggestionsEl) {
@@ -2075,6 +2120,14 @@ function setupChat() {
       resizing = null;
       try { resizeHandle.releasePointerCapture(e.pointerId); } catch {}
       win.classList.remove('resizing');
+      // Persist the new size so it survives an app restart.
+      const w = win.offsetWidth, height = win.offsetHeight;
+      getStore().then(s => {
+        if (!s) return;
+        s.set('chat.window_size', { width: w, height }).then(() => {
+          if (s.save) s.save();
+        }).catch(() => {});
+      }).catch(() => {});
     };
 
     resizeHandle.addEventListener('pointerdown', onDown);
