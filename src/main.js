@@ -2119,8 +2119,13 @@ function setupChat() {
       if (!resizing) return;
       const dw = e.clientX - resizing.startX;
       const dh = e.clientY - resizing.startY;
-      const w = Math.min(maxW(), Math.max(minW, resizing.startW + dw));
-      const h = Math.min(maxH(), Math.max(minH, resizing.startH + dh));
+      // Resize handle sits at the TOP-LEFT corner of the chat window
+      // (below the chat header). The opposite corner — bottom-right —
+      // is the anchored edge, so dragging the handle left/up grows the
+      // window and dragging right/down shrinks it. Invert the deltas
+      // compared to the classic bottom-right-handle math.
+      const w = Math.min(maxW(), Math.max(minW, resizing.startW - dw));
+      const h = Math.min(maxH(), Math.max(minH, resizing.startH - dh));
       win.style.width = w + 'px';
       win.style.height = h + 'px';
     };
