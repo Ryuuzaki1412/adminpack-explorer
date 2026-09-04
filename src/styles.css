@@ -1549,6 +1549,8 @@ body {
   color: var(--text);
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
+  position: relative;
+  padding-right: 38px; /* room for copy button */
 }
 
 .chat-msg.error {
@@ -1565,6 +1567,78 @@ body {
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
   font-style: italic;
+}
+
+/* Copy button inside assistant message (bottom-right) */
+.chat-msg-copy {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+}
+.chat-msg.assistant:hover .chat-msg-copy,
+.chat-msg-copy:focus-visible,
+.chat-msg-copy.copied {
+  opacity: 1;
+}
+.chat-msg-copy:hover {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.chat-msg-copy.copied {
+  background: #e8f3eb;
+  color: var(--success);
+  border-color: #c5e3cf;
+}
+.chat-msg-copy svg {
+  flex-shrink: 0;
+}
+
+/* Resize handle (bottom-right corner of chat window) */
+.chat-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  z-index: 11;
+  user-select: none;
+  touch-action: none;
+}
+.chat-resize-handle::before {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--text-subtle);
+  border-bottom: 2px solid var(--text-subtle);
+  opacity: 0.45;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+.chat-resize-handle:hover::before {
+  opacity: 1;
+  border-right-color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.chat-window.resizing {
+  transition: none !important;
+  user-select: none;
 }
 
 .chat-msg.thinking::after {

@@ -1,5 +1,25 @@
 # AdminPack Explorer 更新日志
 
+## v0.1.10 — 2026-09-04
+
+### ✨ AI 聊天增强
+- **粘贴图片上传**：AI 对话框支持 `Cmd/Ctrl+V` 直接粘贴剪贴板里的图片作为附件（之前只能点 📎 按钮或拖拽）
+  - 仅当剪贴板包含图片时拦截，文本粘贴仍走默认行为不受影响
+- **AI 回答一键复制**：每条助手消息右下角新增"复制"按钮
+  - Hover 才显示，不干扰阅读
+  - 复制的是**原始 Markdown 文本**（含代码块、表格、列表），不是渲染后的 HTML
+  - 点击后变绿显示"已复制"并伴随 toast 提示
+- **聊天框可缩放**：右下角新增拖拽手柄
+  - 最小 360×420，最大不超过视口
+  - 锚定右下角，拖大时向上、向左扩展
+  - 使用 `pointerdown/move/up` + `setPointerCapture`，流畅且不卡顿
+
+### 🔧 内部改动
+- `.chat-msg.assistant` 增加 `position: relative` + 右侧内边距（容纳复制按钮）
+- 新增 `.chat-msg-copy` / `.chat-resize-handle` / `.chat-window.resizing` 样式
+
+---
+
 ## v0.2.0 — 2026-07-11
 
 ### 🔐 安全

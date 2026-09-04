@@ -1875,6 +1875,27 @@ function setupChat() {
     });
   }
 
+  // Paste image from clipboard (Ctrl/Cmd+V) — only when chat is open,
+  // and only intercept when clipboard contains an image. Text paste in
+  // the textarea still works normally.
+  document.addEventListener('paste', (e) => {
+    if (!win || win.style.display === 'none') return;
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const files = [];
+    for (const item of cd.items || []) {
+      if (item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length === 0) return; // no images → let default paste happen
+    e.preventDefault();
+    e.stopPropagation();
+    handleFiles(files);
+    if (input) input.focus();
+  });
+
   if (clearBtn) clearBtn.addEventListener('click', () => {
     _chatHistory = [];
     if (messagesEl) messagesEl.innerHTML = '';
@@ -1906,6 +1927,38 @@ function setupChat() {
     const d = document.createElement('div');
     d.className = 'chat-msg assistant md-content';
     d.innerHTML = renderMarkdown(text);
+
+    // Copy-to-clipboard button (bottom-right of message)
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'chat-msg-copy';
+    copyBtn.title = '复制回答';
+    copyBtn.setAttribute('aria-label', '复制回答');
+    copyBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      <span class="chat-msg-copy-label">复制</span>
+    `;
+    copyBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ok = await copyToClipboard(text);
+      const labelEl = copyBtn.querySelector('.chat-msg-copy-label');
+      if (ok) {
+        copyBtn.classList.add('copied');
+        if (labelEl) labelEl.textContent = '已复制';
+        toast('已复制到剪贴板', 'success', 1500);
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          if (labelEl) labelEl.textContent = '复制';
+        }, 1500);
+      } else {
+        toast('复制失败', 'error');
+      }
+    });
+    d.appendChild(copyBtn);
+
     messagesEl.appendChild(d);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     if (fab) fab.classList.add('has-unread');
@@ -1986,6 +2039,49 @@ function setupChat() {
       send();
     }
   });
+
+  // Resize handle — drag bottom-right corner to grow/shrink the chat
+  // window. Bottom + right anchors stay fixed, so growing = expand up + left.
+  const resizeHandle = document.getElementById('chatResizeHandle');
+  if (resizeHandle && win) {
+    let resizing = null;
+    const minW = 360, minH = 420;
+    const maxW = () => Math.max(minW, window.innerWidth - 40);
+    const maxH = () => Math.max(minH, window.innerHeight - 100);
+
+    const onDown = (e) => {
+      e.preventDefault();
+      const rect = win.getBoundingClientRect();
+      resizing = {
+        startX: e.clientX,
+        startY: e.clientY,
+        startW: rect.width,
+        startH: rect.height,
+      };
+      try { resizeHandle.setPointerCapture(e.pointerId); } catch {}
+      win.classList.add('resizing');
+    };
+    const onMove = (e) => {
+      if (!resizing) return;
+      const dw = e.clientX - resizing.startX;
+      const dh = e.clientY - resizing.startY;
+      const w = Math.min(maxW(), Math.max(minW, resizing.startW + dw));
+      const h = Math.min(maxH(), Math.max(minH, resizing.startH + dh));
+      win.style.width = w + 'px';
+      win.style.height = h + 'px';
+    };
+    const onUp = (e) => {
+      if (!resizing) return;
+      resizing = null;
+      try { resizeHandle.releasePointerCapture(e.pointerId); } catch {}
+      win.classList.remove('resizing');
+    };
+
+    resizeHandle.addEventListener('pointerdown', onDown);
+    resizeHandle.addEventListener('pointermove', onMove);
+    resizeHandle.addEventListener('pointerup', onUp);
+    resizeHandle.addEventListener('pointercancel', onUp);
+  }
 }
 
 async function updateCacheStats() {
