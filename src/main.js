@@ -1881,12 +1881,21 @@ function setupChat() {
   function handleFiles(fileList) {
     for (const file of fileList) {
       if (!file.type.startsWith('image/')) continue;
+      // macOS screenshot paste can attach the same image twice in
+      // clipboardData.items; File API calls may also be invoked more
+      // than once if a listener fires twice. Use (name + size +
+      // lastModified) as a stable identity key and skip duplicates.
+      const key = `${file.name}|${file.size}|${file.lastModified}`;
+      if (_pendingImages.some(img => img._key === key)) continue;
       const reader = new FileReader();
       reader.onload = () => {
         // reader.result is a data URL: "data:image/png;base64,XXXX"
         const m = /^data:([^;]+);base64,(.*)$/.exec(reader.result);
         if (!m) return;
-        _pendingImages.push({ media_type: m[1], data: m[2] });
+        // Re-check at onload time too — multiple async onload
+        // callbacks might race past the sync check above.
+        if (_pendingImages.some(img => img._key === key)) return;
+        _pendingImages.push({ media_type: m[1], data: m[2], _key: key });
         renderAttachments();
       };
       reader.readAsDataURL(file);

@@ -1609,13 +1609,13 @@ body {
   flex-shrink: 0;
 }
 
-/* Resize handle (bottom-right corner of chat window) */
+/* Resize handle (top-left corner of chat window, inside the message area) */
 .chat-resize-handle {
   position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 16px;
-  height: 16px;
+  left: 0;
+  top: 50px;  /* clear the chat-header (~50px tall) */
+  width: 14px;
+  height: 14px;
   cursor: nwse-resize;
   z-index: 11;
   user-select: none;
@@ -1624,19 +1624,19 @@ body {
 .chat-resize-handle::before {
   content: '';
   position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--text-subtle);
-  border-bottom: 2px solid var(--text-subtle);
+  left: 3px;
+  top: 3px;
+  width: 6px;
+  height: 6px;
+  border-left: 2px solid var(--text-subtle);
+  border-top: 2px solid var(--text-subtle);
   opacity: 0.45;
   transition: opacity 0.15s, border-color 0.15s;
 }
 .chat-resize-handle:hover::before {
   opacity: 1;
-  border-right-color: var(--accent);
-  border-bottom-color: var(--accent);
+  border-left-color: var(--accent);
+  border-top-color: var(--accent);
 }
 .chat-window.resizing {
   transition: none !important;

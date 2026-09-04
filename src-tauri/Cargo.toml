@@ -1,6 +1,6 @@
 [package]
 name = "adminpack-explorer"
-version = "0.2.0"
+version = "0.2.1"
 description = "Tauri desktop app for browsing and inspecting Logicalis NMS AdminPack monitoring definitions"
 edition = "2021"
 rust-version = "1.77"
